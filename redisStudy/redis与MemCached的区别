@@ -1,0 +1,60 @@
+一、redis与memcache对比
+1.性能
+  Redis：只使用单核，平均每一个核上Redis在存储小数据时比Memcached性能更高。
+  Memcached：可以使用多核，而在100k以上的数据中，Memcached性能要高于Redis。
+2.内存使用效率
+  MemCached：使用简单的key-value存储，Memcached的内存利用率更高。
+  Redis：如果采用hash结构来做key-value存储，由于其组合式的压缩，其内存利用率会高于Memcached。
+    Redis在使用的时候，可以直接对数据进行加工，再返回给客户端。但是MemCached就要返回全部的数据，由于数据都是要通过
+    IO传输进来的，所以redis在数据传输量这里占了很大优势。再者，MemCached这里会在客户端处有相应的算法支撑来处理数据
+    所以Redis在一定场景下，他的速度要比MemCached
+3.内存空间和数据量大小
+  MemCached：可以修改最大内存，采用LRU算法。Memcached单个key-value大小有限，一个value最大只支持1MB。
+  Redis：增加了VM的特性，突破了物理内存的限制。Redis单个key-value大小最大支持512MB 。
+4.数据结构支持
+  MemCached：数据结构单一，仅用来缓存数据。
+  Redis：支持更加丰富的数据类型，Redis不仅仅支持简单的k/v类型的数据，同时还提供list，set，zset，hash等数据结构的存储。
+  可以在服务器端直接对数据进行丰富的操作,这样可以减少网络IO次数和数据体积。
+
+5.可靠性
+Memcached：只是个内存缓存，对可靠性要求低。MemCached不支持数据持久化，断电或重启后数据消失，但稳定性是有保证的。
+
+Redis：对可靠性要求高，支持数据持久化和数据恢复，允许单点故障，同时也会影响部分性能。支持数据的备份，即master-slave模式的数据备份。Redis支持数据的持久化，可以将内存中的数据保存到磁盘中，重启的时候可以再次加载进行使用。
+
+6.应用场景
+Memcached：动态系统中减轻数据库负载，提升性能；做缓存，适合多读少写，大数据量场景。 
+Redis：适用于对读写效率要求都很高，数据处理业务复杂和对安全性要求较高的系统。
+
+ 
+
+二、redis与memcache内存管理机制对比
+
+1. Memcached的内存管理机制
+
+Memcached默认使用Slab Allocation机制管理内存，其主要思想是按照预先规定的大小，将分配的内存分割成特定长度的块以存储相应长度的key-value数据记录，以完全解决内存碎片问题。Slab Allocation机制只为存储外部数据而设计，也就是说所有的key-value数据都存储在Slab Allocation系统里，而Memcached的其它内存请求则通过普通的malloc/free来申请，因为这些请求的数量和频率决定了它们不会对整个系统的性能造成影响
+
+2. Redis的内存管理机制
+
+Redis的内存管理主要通过源码中zmalloc.h和zmalloc.c两个文件来实现的。Redis为了方便内存的管理，在分配一块内存之后，会将这块内存的大小存入内存块的头部。如图 5所示，real_ptr是redis调用malloc后返回的指针。redis将内存块的大小size存入头部，size所占据的内存大小是已知的，为 size_t类型的长度，然后返回ret_ptr。当需要释放内存的时候，ret_ptr被传给内存管理程序。通过ret_ptr，程序可以很容易的算出 real_ptr的值，然后将real_ptr传给free释放内存。Redis采用的是包装的mallc/free，相较于Memcached的内存管理方法来说，要简单很多。
+
+ 
+
+三、 Redis和Memcached的集群实现机制对比
+
+1. Memcached的分布式存储
+
+Memcached本身并不支持分布式，因此只能在客户端通过像一致性哈希这样的分布式算法来实现Memcached的分布式存储。
+
+当客户端向Memcached集群发送数据之前，首先会通过内置的分布式算法计算出该条数据的目标节点，然后数据会直接发送到该节点上存储。但客户端查询数据时，同样要计算出查询数据所在的节点，然后直接向该节点发送查询请求以获取数据。
+
+2. Redis的分布式存储
+
+Redis在服务器端构建分布式存储。Redis Cluster是一个实现了分布式且允许单点故障的Redis高级版本，它没有中心节点，具有线性可伸缩的功能。其中节点与节点之间通过二进制协议进行通信，节点与客户端之间通过ascii协议进行通信。在数据的放置策略上，Redis Cluster将整个key的数值域分成4096个哈希槽，每个节点上可以存储一个或多个哈希槽，Redis Cluster支持的最大节点数就是4096。Redis Cluster使用的分布式算法：crc16( key ) % HASH_SLOTS_NUMBER。
+
+为了保证单点故障下的数据可用性，Redis Cluster引入了Master节点和Slave节点。在Redis Cluster中，每个Master节点都会有对应的两个用于冗余的Slave节点。这样在整个集群中，任意两个节点的宕机都不会导致数据的不可用。当Master节点退出后，集群会自动选择一个Slave节点成为新的Master节点。
+
+
+
+
+
+
